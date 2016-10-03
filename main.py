@@ -2,16 +2,19 @@ import color
 import math
 import os
 import pygame
+from decimal import Decimal
 
-VAL = 1 / math.sqrt(2)
+VAL = Decimal(1 / math.sqrt(2))
+DEC_0 = Decimal(0)
+DEC_1 = Decimal(1)
 TOP_LEFT_NORM = -VAL, -VAL
 TOP_RIGHT_NORM = VAL, -VAL
 BOTTOM_RIGHT_NORM = VAL, VAL
 BOTTOM_LEFT_NORM = -VAL, VAL
-TOP_NORM = 0, -1
-BOTTOM_NORM = 0, 1
-LEFT_NORM = -1, 0
-RIGHT_NORM = 1, 0
+TOP_NORM = DEC_0, -DEC_1
+BOTTOM_NORM = DEC_0, DEC_1
+LEFT_NORM = -DEC_1, DEC_0
+RIGHT_NORM = DEC_1, DEC_0
 BALL_OUT = 25
 # TODO: Replace raw vector tuples with names constants.
 
@@ -35,6 +38,8 @@ class Configuration(object):
         self.buffer = 10
 
         self.strike_zone_divisor = 3
+        self.right_wall_norm = normalize((-1, -1))
+        self.left_wall_norm = normalize((1, -1))
 
     @property
     def ball_size(self):
@@ -60,8 +65,8 @@ class Block(pygame.sprite.Sprite):
         self.image = pygame.Surface(c.block_size)
         self.image.fill(color.rand_color())
         self.rect = self.image.get_rect()
-        self.rect.x = x
-        self.rect.y = y
+        self.rect.x = Decimal(x)
+        self.rect.y = Decimal(y)
 
     def update(self):
         pass
@@ -113,6 +118,7 @@ class Ball(pygame.sprite.Sprite):
         self.facing = TOP_RIGHT_NORM
         self.speed = config.ball_speed
         self.strike_zone = self.paddle.width / config.strike_zone_divisor
+        self.c = config
 
     def update(self, td, blocks=None):  # TODO: Refactor to get paddle and screen passed in instead of storing a reference.
         self.x, self.y = self.x + self.velocity[0] * td, self.y + self.velocity[1] * td
@@ -123,11 +129,11 @@ class Ball(pygame.sprite.Sprite):
             if self.rect.left < self.screen.left:
                 self.rect.left = self.screen.left + 1
                 if self.facing[0] < 0:
-                    self.facing = self.facing[0] * -1, self.facing[1]
+                    self.facing = normalize(reflection(self.c.left_wall_norm, self.facing))
             elif self.rect.right > self.screen.right:
                 self.rect.right = self.screen.right - 1
                 if self.facing[0] > 0:
-                    self.facing = self.facing[0] * -1, self.facing[1]
+                    self.facing = normalize(reflection(self.c.right_wall_norm, self.facing))
 
         if self.rect.top < self.screen.top:
             self.facing = self.facing[0], self.facing[1] * -1
@@ -136,19 +142,22 @@ class Ball(pygame.sprite.Sprite):
                 if self.facing[1] < 0:
                     self.facing = self.facing[0], self.facing[1] * -1
 
-        if self.facing[1] > 0 and self.rect.colliderect(self.paddle):
+        if self.rect.colliderect(self.paddle):
             if self.rect.right < self.paddle.left + self.strike_zone:
                 self.facing = normalize(reflection(TOP_LEFT_NORM, self.facing))
             elif self.rect.left < self.paddle.left + self.strike_zone:
                 surface_norm = TOP_LEFT_NORM[0] + TOP_NORM[0], TOP_LEFT_NORM[1] + TOP_NORM[1]
-                self.facing = normalize(reflection(surface_norm, self.facing))
+                self.facing = normalize(reflection(normalize(surface_norm), self.facing))
             elif self.rect.left > self.paddle.left + self.strike_zone and self.rect.right < self.paddle.right - self.strike_zone:
                 self.facing = normalize(reflection(TOP_NORM, self.facing))
             elif self.rect.right > self.paddle.right - self.strike_zone:
                 surface_norm = TOP_RIGHT_NORM[0] + TOP_NORM[0], TOP_RIGHT_NORM[1] + TOP_NORM[1]
-                self.facing = normalize(reflection(surface_norm, self.facing))
+                self.facing = normalize(reflection(normalize(surface_norm), self.facing))
             else:
                 self.facing = normalize(reflection(TOP_RIGHT_NORM, self.facing))
+            self.rect.bottom = self.paddle.top - 1
+            if self.facing[1] > 0:
+                self.facing = self.facing[0], self.facing[1] * -1
 
         if blocks is not None:
             block = pygame.sprite.spritecollideany(self, blocks)
@@ -243,7 +252,7 @@ def normalize(vector):
     :param vector: iterable x, y
     :return: x, y
     """
-    length = math.sqrt(vector[0] ** 2 + vector[1] ** 2)
+    length = Decimal(math.sqrt(vector[0] ** 2 + vector[1] ** 2))
     return vector[0] / length, vector[1] / length
 
 
@@ -269,7 +278,7 @@ def main(config, screen):
     Ball(player.sprite.rect, screen_rect, config, ball)
 
     while running:
-        td = clock.tick(60) / 1000.0
+        td = Decimal(clock.tick(60) / 1000.0)
         for e in pygame.event.get():
             if e.type == pygame.QUIT:
                 running = False
